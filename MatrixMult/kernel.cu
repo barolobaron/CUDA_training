@@ -17,7 +17,12 @@ struct fail_exc {
 
 cudaError_t matrixMult(double* mR, const double* mA, const double* mB, uint32_t width);
 
-__global__ void matrixMultK(double *mR, const double* mA, const double *mB, uint32_t width)
+// The kernel for matrix multiplication.
+// - uses shared memory (by means of tiling) for faster access to input
+// - loads and stores to global device memory by row major (memory coalescence)
+// - prefetch accesses to global device memory
+// - loop unroll
+__global__ void matrixMultK(double* mR, const double* mA, const double* mB, uint32_t width)
 {
     // CUDA coordinates
     unsigned int bx = blockIdx.x;
@@ -38,22 +43,38 @@ __global__ void matrixMultK(double *mR, const double* mA, const double *mB, uint
     // will accumulate computations and ultimately contain R[x,y].
     double res{};
 
+    // Prefetch first tile to registers curA, cur B
+    // Threads in the same row load items in the same row (ensures memory coalescence).
+    double curA = mA[y * width + tx];
+    double curB = mB[ty * width + x];
+
     // each iteration calculates the contribution of two square input tiles
     // to the result
-    for (int m = 0; m < width/TWIDTH; ++m) {
-        // phase 1: parallel load of shared memory
-        tileA[tx][ty] = mA[y * width + m * TWIDTH + tx];
-        tileB[tx][ty] = mB[((m * TWIDTH) + ty)* width + x];
+    for (int m = 1; m <= width / TWIDTH; ++m) {
+        // Phase 1: store registers to shared memory
+        // Put tx in the second index to ensure storage by row major (memory coalescence).
+        tileA[ty][tx] = curA;
+        tileB[ty][tx] = curB;
         __syncthreads();
 
+        // prefetch next tile
+        if (m < width / TWIDTH) {
+            curA = mA[y * width + m * TWIDTH + tx];
+            curB = mB[((m * TWIDTH) + ty) * width + x];
+        }
+
         // phase 2: partial dot product up to the current input tiles
-        for (int k = 0; k < TWIDTH; ++k)
-            res += tileA[tx][k] * tileB[k][ty];
+        // unrolling the main computation can improve performance
+#pragma unroll
+        for (int k = 0; k < TWIDTH; ++k) {
+            res += tileA[k][tx] * tileB[ty][k];
+        }
 
         // avoid starting new iteration before everyone is done
         __syncthreads();
     }
-    
+
+    // output to the matrix
     mR[i] = res;
 }
 
@@ -84,10 +105,11 @@ int main()
     // The easiest choice is to use powers of 2^k where k >= 5. This ensures we can
     // repeatedly divide by powers of 2 whenever it's useful to do so
 
-    const int width = 1 << 9;
+    const uint32_t width = 1 << 5;
     double* mA{}, *mB{}; // input matrices 
     double* mR{}; // output matrix
     cudaError_t cudaStatus;
+    int failure = 0; // not failed by default
 
     try {
         // Allocate matrices
@@ -95,24 +117,47 @@ int main()
         mB = reinterpret_cast<double*>(host_alloc(width * width * sizeof(double)));
         mR = reinterpret_cast<double*>(host_alloc(width * width * sizeof(double)));
 
-        // 
+        // put some values in the input
         initialize_matrix(mA, width);
         initialize_matrix(mB, width);
 
-        // ...
+        // run the multiplication
         cudaStatus = matrixMult(mR, mA, mB, width);
 
         if (cudaStatus != cudaSuccess) {
-            fprintf(stderr, "addWithCuda failed!");
-            return 1;
+            throw fail_exc{ std::string("addWithCuda failed!") };
         }
 
     }
     catch (fail_exc e) {
-        std::cerr << "Host error: " << e.reason << std::endl;
+        std::cerr << e.reason << std::endl;
+        failure = 1;
+        goto cleanup;
     }
 
-    // cleanup
+    std::cout << "Input matrix:" << std::endl;
+    for (int h = 0; h < width; ++h) {
+        for (int k = 0; k < width; ++k)
+            std::cout << mA[h * width + k] << " ";
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
+
+    /*
+    std::cout << "Diagonal output:" << std::endl;
+    for (int k = 0; k < width; ++k)
+        std::cout << mR[k * width + k] << " ";
+    std::cout << std::endl << std::endl;
+    */
+    std::cout << "Squared matrix:" << std::endl;
+    for (int h = 0; h < width; ++h) {
+        for (int k = 0; k < width; ++k)
+            std::cout << mR[h * width + k] << " ";
+        std::cout << std::endl;
+    }
+    std::cout << std::endl;
+
+cleanup:
     if (mA)
         host_free(mA);
     if (mB)
@@ -128,6 +173,7 @@ int main()
         return 1;
     }
 
+    return failure;
 
 }
 
@@ -198,13 +244,11 @@ cudaError_t matrixMult(double* mR, const double* mA, const double* mB, uint32_t 
     }
 
     // Copy output vector from GPU buffer to host memory.
-    cudaStatus = cudaMemcpy(mR, dev_mR, width * width * sizeof(int), cudaMemcpyDeviceToHost);
+    cudaStatus = cudaMemcpy(mR, dev_mR, width * width * sizeof(double), cudaMemcpyDeviceToHost);
     if (cudaStatus != cudaSuccess) {
         fprintf(stderr, "cudaMemcpy failed!");
         goto Error;
     }
-
-    std::cout << "Multiplication result at (0,0) = " << mR[0] << std::endl << std::endl;
 
 Error:
     cudaFree(dev_mR);
