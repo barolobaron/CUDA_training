@@ -4,6 +4,7 @@
 
 #include <string>
 #include <stdio.h>
+#include <conio.h>
 #include <iostream>
 #include <Windows.h>
 #include <memoryapi.h>
@@ -105,11 +106,12 @@ int main()
     // The easiest choice is to use powers of 2^k where k >= 5. This ensures we can
     // repeatedly divide by powers of 2 whenever it's useful to do so
 
-    const uint32_t width = 1 << 5;
+    const uint32_t width = 1 << 10;
     double* mA{}, *mB{}; // input matrices 
     double* mR{}; // output matrix
     cudaError_t cudaStatus;
     int failure = 0; // not failed by default
+    char repeat = 'Y'; // used for interactive cycle to inspect output
 
     try {
         // Allocate matrices
@@ -135,27 +137,33 @@ int main()
         goto cleanup;
     }
 
-    std::cout << "Input matrix:" << std::endl;
-    for (int h = 0; h < width; ++h) {
-        for (int k = 0; k < width; ++k)
-            std::cout << mA[h * width + k] << " ";
-        std::cout << std::endl;
-    }
-    std::cout << std::endl;
+    uint32_t i, j;
+    while (repeat == 'Y' || repeat == 'y') {
+        std::cout << "Large matrix output will be displayed in chunks of size " << TWIDTH << "*" << TWIDTH << "."
+            << std::endl;
+        std::cout << "Enter the coordinates of the top-left coordinates of the chunk." << std::endl;
+        std::cout << "Coordinate X (0-" << width - 1 << "): ";
+        std::cin >> i;
+        std::cin.clear(); //  quick & dirty way to ignore malformed user input
+        std::cout << "Coordinate Y (0-" << width - 1 << "): ";
+        std::cin >> j;
+        std::cin.clear();
 
-    /*
-    std::cout << "Diagonal output:" << std::endl;
-    for (int k = 0; k < width; ++k)
-        std::cout << mR[k * width + k] << " ";
-    std::cout << std::endl << std::endl;
-    */
-    std::cout << "Squared matrix:" << std::endl;
-    for (int h = 0; h < width; ++h) {
-        for (int k = 0; k < width; ++k)
-            std::cout << mR[h * width + k] << " ";
+        std::cout << "Result submatrix:" << std::endl;
+        for (uint32_t h = 0; h < TWIDTH && i + h < width; ++h) {
+            for (uint32_t k = 0; k < TWIDTH && j + k < width; ++k)
+                std::cout << mR[(h + i) * width + j + k] << " ";
+            std::cout << std::endl;
+        }
         std::cout << std::endl;
+
+        std::cout << "Continue? (Y/N)";
+        do {
+            repeat = _getch();
+        } while (repeat != 'Y' && repeat != 'y' && repeat != 'N' && repeat != 'n');
+        std::cout << std::endl << std::endl;
     }
-    std::cout << std::endl;
+
 
 cleanup:
     if (mA)
