@@ -1,1 +1,1 @@
-# CUDA_training
+README

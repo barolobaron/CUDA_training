@@ -2,5 +2,9 @@
   <Configurations>
     <Platform Name="x64" />
   </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="Exercises/Exercises.vcxproj" Id="60f62b29-0047-48b8-b4b2-4bc84d3bc44c" />
   <Project Path="MatrixMult/MatrixMult.vcxproj" />
 </Solution>
