@@ -79,6 +79,71 @@ __global__ void matrixMultK(double* mR, const double* mA, const double* mB, uint
     mR[i] = res;
 }
 
+// Exercise 6.2
+// The kernel for matrix multiplication WITH CORNER TURNING
+// - mA is provided in row major layout (standard)
+// - mB is provided in column major layout!
+// - values from mB are copied to tileB by column to ensure memory coalescence
+__global__ void matrixMultKCT(double* mR, const double* mA, const double* mB, uint32_t width)
+{
+    // CUDA coordinates
+    unsigned int bx = blockIdx.x;
+    unsigned int by = blockIdx.y;
+    unsigned int tx = threadIdx.x;
+    unsigned int ty = threadIdx.y;
+
+    // matrix coordinates
+    unsigned int x = bx * TWIDTH + tx;
+    unsigned int y = by * TWIDTH + ty;
+
+    // array index
+    unsigned int i = y * width + x;
+
+    // input tiles in shared memory
+    __shared__ double tileA[TWIDTH][TWIDTH], tileB[TWIDTH][TWIDTH];
+
+    // will accumulate computations and ultimately contain R[x,y].
+    double res{};
+
+    // Prefetch first tile to registers curA, curB
+    // This time to ensure memory coalescence we perform corner-turning on curB
+    // (we exchange the meaning of tx and ty
+    double curA = mA[y * width + tx];
+    double curB = mB[tx * width + (bx * TWIDTH + ty)]; // was: ty * width + x
+
+    // each iteration calculates the contribution of two square input tiles
+    // to the result
+    for (int m = 1; m <= width / TWIDTH; ++m) {
+        // Phase 1: store registers to shared memory
+        // Put tx in the second index to ensure storage by row major (memory coalescence).
+        tileA[ty][tx] = curA;
+        tileB[tx][ty] = curB; // corner turning
+        __syncthreads();
+
+        // prefetch next tile
+        if (m < width / TWIDTH) {
+            curA = mA[y * width + m * TWIDTH + tx];
+            curB = mB[((m * TWIDTH) + tx) * width + (bx * TWIDTH + ty)]; // corner turning
+        }
+
+        // phase 2: partial dot product up to the current input tiles
+        // unrolling the main computation can improve performance
+        // corner-turning: note that now tileB contains a portion of mB in row-major order
+        // so the rest of the algorithm is unchanged
+#pragma unroll
+        for (int k = 0; k < TWIDTH; ++k) {
+            res += tileA[k][tx] * tileB[ty][k];
+        }
+
+        // avoid starting new iteration before everyone is done
+        __syncthreads();
+    }
+
+    // output to the matrix
+    mR[i] = res;
+}
+
+
 // Allocated region is guaranteed to be initialized to zero.
 LPVOID host_alloc(uint32_t len) {
     LPVOID ptr;
@@ -127,7 +192,7 @@ int main()
         cudaStatus = matrixMult(mR, mA, mB, width);
 
         if (cudaStatus != cudaSuccess) {
-            throw fail_exc{ std::string("addWithCuda failed!") };
+            throw fail_exc{ std::string("matrixMult failed!") };
         }
 
     }
