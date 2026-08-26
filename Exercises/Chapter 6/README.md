@@ -51,29 +51,42 @@ it will access bank `31`. In general, bank accesses for a given `k` are shifted 
 To simplify calculations, we will assume `k == 0`, and point out that when `k` is another
 value bank accesses are shifted by `k * stride`.
 
-a) banks 0-31 (no conflict)
-b) banks 0-30 (bank 0 conflict for `i in { 0, 1 }`)
-c) banks 0-23 (for `(i % 4) in { 0 , 1 }` we get a conflict on bank `3 * (i // 4)`
-d) banks 0-15 (each bank `b` is accessed by threads `2b` and `2b + 1` in the warp
-e) banks 0-11 (`12 * 4 == 48` and `lcm(48, 128) == 384`, so we are squeezing every `384/48 == 8`
-   threads into `384/128 == 3` banks:
-   `bank 0 <- i in { 0, 1, 2 }`
-   `bank 1 <- i in { 3, 4, 5 }`
-   `bank 2 <- i in { 6, 7 }`
-   and then cyclically
-   `bank 3 <- i in { 8, 9, 10 }`
-   `bank 4 <- i in { 11, 12, 13 }`
-   `bank 5 <- i in { 14, 15 }`
-   etc.)
-f) banks 0-7 (each bank `b` is accessed by threads `4b + m` in the warp, where `m in { 0, 1, 2, 3 }`
-g) banks 0-6 (`7 * 4 == 28` and `lcm(28, 128) == 896`, so we are squeezing every `896/28 == 32` 
-   threads in `896/128 == 7` banks... this is not of great help!
-   There is no cycle shorter than 32, so we have to check each thread individually.
-   We get:
-   `bank 0 <- i in { 0 ... 4 }`
-   `bank 1 <- i in { 5 ... 9 }`
-   `bank 2 <- i in { 10 ... 13 }`
-   `bank 3 <- i in { 14 ... 18 }`
-   `bank 4 <- i in { 19 ... 22 }`
-   `bank 5 <- i in { 23 ... 27 }`
-   `bank 6 <- i in { 28 ... 31 }`
+a. banks 0-31 (no conflict)
+
+b. banks 0-30 (bank 0 conflict for `i in { 0, 1 }`)
+
+c. banks 0-23 (for `(i % 4) in { 0 , 1 }` we get a conflict on bank `3 * (i // 4)`
+
+d. banks 0-15 (each bank `b` is accessed by threads `2b` and `2b + 1` in the warp
+
+e. banks 0-11 
+```
+12 * 4 == 48` and `lcm(48, 128) == 384`, so we are squeezing every `384/48 == 8`
+threads into `384/128 == 3` banks:
+
+bank 0 <- i in { 0, 1, 2 }
+bank 1 <- i in { 3, 4, 5 }
+bank 2 <- i in { 6, 7 }
+and then cyclically
+bank 3 <- i in { 8, 9, 10 }
+bank 4 <- i in { 11, 12, 13 }`
+bank 5 <- i in { 14, 15 }
+etc.
+```
+
+f. banks 0-7 (each bank `b` is accessed by threads `4b + m` in the warp, where `m in { 0, 1, 2, 3 }`
+
+g. banks 0-6 
+```
+7 * 4 == 28` and lcm(28, 128) == 896, so we are squeezing every 896/28 == 32
+threads in 896/128 == 7 banks... this is not of great help!
+There is no cycle shorter than 32, so we have to check each thread individually.
+We get:
+bank 0 <- i in { 0 ... 4 }
+bank 1 <- i in { 5 ... 9 }
+bank 2 <- i in { 10 ... 13 }
+bank 3 <- i in { 14 ... 18 }
+bank 4 <- i in { 19 ... 22 }
+bank 5 <- i in { 23 ... 27 }
+bank 6 <- i in { 28 ... 31 }
+```
