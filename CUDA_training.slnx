@@ -5,6 +5,7 @@
   <Folder Name="/Solution Items/">
     <File Path="README.md" />
   </Folder>
+  <Project Path="Convolution/Convolution.vcxproj" />
   <Project Path="Exercises/Exercises.vcxproj" Id="60f62b29-0047-48b8-b4b2-4bc84d3bc44c" />
   <Project Path="MatrixMult/MatrixMult.vcxproj" />
   <Project Path="VectorAdd/VectorAdd.vcxproj" Id="cd098b5a-5966-f870-203a-51ee1dbe1d51" />
