@@ -142,6 +142,7 @@
     <None Include="Chapter 4\README.md" />
     <None Include="Chapter 5\README.md" />
     <None Include="Chapter 6\README.md" />
+    <None Include="Chapter 7\README.md" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
