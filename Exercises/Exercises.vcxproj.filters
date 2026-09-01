@@ -20,5 +20,6 @@
     <None Include="Chapter 6\README.md" />
     <None Include="Chapter 7\README.md" />
     <None Include="Chapter 8\README.md" />
+    <None Include="Chapter 9\README.md" />
   </ItemGroup>
 </Project>
